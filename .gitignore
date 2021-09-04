@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+*.egg
+*.egg-info
+
+.mypy_cache
+*.so
+
+.idea
+.vscode
