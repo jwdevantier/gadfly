@@ -75,7 +75,7 @@ def main(silent: bool = False, project: Path = typer.Option(default=Path("."), h
     config.config = config.Config(
         silent=silent,
         project_root=project.absolute(),
-        context={}
+        context={}, page_md={}
     )
 
 

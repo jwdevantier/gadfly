@@ -7,6 +7,7 @@ class Config:
     project_root: Path
     silent: bool
     context: field(default_factory=dict)
+    page_md: field(default_factory=dict)
 
     @property
     def pages_path(self) -> Path:

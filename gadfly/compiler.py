@@ -64,9 +64,20 @@ def output_path(config: Config, page_path: Path) -> Path:
     return config.output_path / fpath.parent / (fpath.name[:-len(".md")]) / "index.html"
 
 
-def compile_page(page: Path, context: Context):
+def compile_page(page: Path, config: Config):
     with open(page.absolute()) as fh:
         page_source = fh.read()
+    # Enrich context with page-specific vars
+    page_name = page.relative_to(config.pages_path)
+    config.page_md[page_name] = {}
+
+    def update_page_md(data: dict) -> str:
+        config.page_md[page_name] = {**config.page_md[page_name], **data}
+        return ""  # if None is returned, None is rendered in the output iff function is called directly
+
+    context = {**config.context,
+               "gf_page_name": page_name,
+               "gf_update_page_md": update_page_md}
     res = j2env.from_string(page_source).render(**context)
     return re.sub("(^<P>|</P>$)", "", res, flags=re.IGNORECASE)
 
@@ -76,7 +87,7 @@ def compile_all(config: Config):
         for filename in file_names:
             if filename.endswith(".md"):
                 fpath = (Path(dirpath) / filename)
-                yield fpath, compile_page(fpath, config.context)
+                yield fpath, compile_page(fpath, config)
 
 
 def write_output_file(config: Config, page_path: Path, content: str):
@@ -88,7 +99,7 @@ def write_output_file(config: Config, page_path: Path, content: str):
 
 
 def render(config: Config, page: Path):
-    content = compile_page(page, config.context)
+    content = compile_page(page, config)
     write_output_file(config, page, content)
 
 
