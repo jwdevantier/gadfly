@@ -25,5 +25,9 @@ class Config:
     def context_files_path(self) -> Path:
         return (self.project_root / "context").resolve()
 
+    @property
+    def context_main_file(self) -> Path:
+        return self.project_root / "context" / "__main__.py"
+
 
 config: Config

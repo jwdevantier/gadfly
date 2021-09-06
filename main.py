@@ -1,15 +1,13 @@
 import signal
 import sys
 from pathlib import Path
+from multiprocessing import Process
 
 import typer
 from livereload import Server
 
-from gadfly import compiler
 from gadfly import config
-from gadfly.context import update_context
-from gadfly.watch import Watcher, CompileHandler, ContextEventHandler, TemplateEventHandler
-from gadfly.utils import info
+from gadfly import mp
 
 # CLI
 #  watch+dev server
@@ -24,50 +22,29 @@ def compile():
     """
     Do a single compile.
     """
-    print("compiling")
-    update_context(config.config)
-    print("-- context --")
-    print(repr(config.config.context))
-    print("-- -- --")
-    compiler.render_all(config.config)
+    mp.compile_once(config.config)
 
 
 @app.command()
-def watch():
+def watch(watch_port: int = 5500):
     """
     Watch for changes and recompile when needed.
     """
-    update_context(config.config)
-    compiler.render_all(config.config)
+    def _serve():
+        Server().serve(root=config.config.output_path, port=watch_port)
 
-    info("watching for changes...")
-    pages_watcher = Watcher(
-        path=config.config.pages_path, handler=CompileHandler())
-    pages_watcher.run()
-
-    context_watcher = Watcher(
-        path=config.config.context_files_path,
-        handler=ContextEventHandler()
-    )
-    context_watcher.run()
-
-    template_watcher = Watcher(
-        path=config.config.templates_path,
-        handler=TemplateEventHandler()
-    )
-    template_watcher.run()
-
-    server = Server()
+    server = Process(target=_serve)
 
     def on_ctrl_c(sig, frame):
-        pages_watcher.stop()
-        context_watcher.stop()
-        template_watcher.stop()
+        print("CTRL-C hit..")
+        server.terminate()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, on_ctrl_c)
 
-    server.serve(root=config.config.output_path)
+    server.start()
+    mp.compile_watch(config.config)
+    server.terminate()
 
 
 @app.callback()
