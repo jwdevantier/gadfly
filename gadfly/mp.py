@@ -89,8 +89,8 @@ def _eval_context(cfg: config.Config):
     # NOTE: _must_ be run within the context of a separate process.
     #       Otherwise, changes to modules would never take effect as the import
     #       system caches imports.
-    fpath = cfg.context_main_file
-    spec = spec_from_file_location("module.name", fpath)
+    fpath = cfg.user_code_file
+    spec = spec_from_file_location("blogcode", fpath)
     mod = module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.main(cfg)
