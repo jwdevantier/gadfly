@@ -34,13 +34,15 @@ class MDExt(Extension):
         return md.render(block).strip()
 
 
-j2loader = FileSystemLoader(searchpath="./templates")
-j2env = Environment(
-    loader=j2loader,
-    auto_reload=True,
-    autoescape=False,
-    extensions=[MDExt]
-)
+def get_j2env(config: Config) -> Environment:
+    j2loader = FileSystemLoader(searchpath=config.templates_path)
+    return Environment(
+        loader=j2loader,
+        auto_reload=True,
+        autoescape=False,
+        extensions=[MDExt]
+    )
+
 
 Context = Dict[str, Any]
 
@@ -64,7 +66,7 @@ def output_path(config: Config, page_path: Path) -> Path:
     return config.output_path / fpath.parent / (fpath.name[:-len(".md")]) / "index.html"
 
 
-def compile_page(page: Path, config: Config):
+def compile_page(page: Path, config: Config, env: Environment):
     with open(page.absolute()) as fh:
         page_source = fh.read()
     # Enrich context with page-specific vars
@@ -78,16 +80,16 @@ def compile_page(page: Path, config: Config):
     context = {**config.context,
                "gf_page_name": page_name,
                "gf_update_page_md": update_page_md}
-    res = j2env.from_string(page_source).render(**context)
+    res = env.from_string(page_source).render(**context)
     return re.sub("(^<P>|</P>$)", "", res, flags=re.IGNORECASE)
 
 
-def compile_all(config: Config):
+def compile_all(config: Config, env: Environment):
     for dirpath, dir_names, file_names in walk(config.pages_path):
         for filename in file_names:
             if filename.endswith(".md"):
                 fpath = (Path(dirpath) / filename)
-                yield fpath, compile_page(fpath, config)
+                yield fpath, compile_page(fpath, config, env)
 
 
 def write_output_file(config: Config, page_path: Path, content: str):
@@ -98,11 +100,11 @@ def write_output_file(config: Config, page_path: Path, content: str):
         fh.write(content)
 
 
-def render(config: Config, page: Path):
-    content = compile_page(page, config)
+def render(config: Config, env: Environment, page: Path):
+    content = compile_page(page, config, env)
     write_output_file(config, page, content)
 
 
-def render_all(config: Config):
-    for page_path, content in compile_all(config):
+def render_all(config: Config, env: Environment):
+    for page_path, content in compile_all(config, env):
         write_output_file(config, page_path, content)

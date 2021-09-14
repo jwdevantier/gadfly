@@ -22,12 +22,12 @@ class Config:
         return (self.project_root / "templates").resolve()
 
     @property
-    def context_files_path(self) -> Path:
-        return (self.project_root / "context").resolve()
+    def user_code_path(self) -> Path:
+        return (self.project_root / "blogcode").resolve()
 
     @property
-    def context_main_file(self) -> Path:
-        return self.project_root / "context" / "__main__.py"
+    def user_code_file(self) -> Path:
+        return self.user_code_path / "__init__.py"
 
 
 config: Config

@@ -101,8 +101,10 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
     config.config = cfg
     # (re-)compute context, done once for duration of the compile-process' lifetime.
     cfg.context = _eval_context(cfg)
+    # initialize templating engine instance
+    j2env = compiler.get_j2env(cfg)
     # render all pages using the newly computed context.
-    compiler.render_all(cfg)
+    compiler.render_all(cfg, j2env)
     while True:
         event = queue.get(block=True)
         # Continue extracting events until queue empty OR STOP event received.
@@ -128,9 +130,9 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
             pass
         if action == EventType.PAGE_CHANGED:
             for page in pages:
-                compiler.render(cfg, Path(page))
+                compiler.render(cfg, j2env, Path(page))
         elif action == EventType.TEMPLATE_CHANGED:
-            compiler.render_all(cfg)
+            compiler.render_all(cfg, j2env)
         elif action == EventType.CONTEXT_CHANGED:
             return
         else:
@@ -163,7 +165,7 @@ def compile_watch(cfg: config.Config) -> None:
     )
     observer.schedule(
         ContextCodeHandler(queue),
-        str(cfg.context_files_path.absolute()),
+        str(cfg.user_code_path.absolute()),
         recursive=True
     )
     observer.schedule(
@@ -185,16 +187,7 @@ def compile_once(cfg: config.Config) -> None:
     if not isinstance(cfg, config.Config):
         raise RuntimeError(f"expected Config, got {type(cfg)}")
     config.context = _eval_context(cfg)
+    # initialize templating engine instance
+    j2env = compiler.get_j2env(cfg)
     # render all pages using the newly computed context.
-    compiler.render_all(cfg)
-
-
-# TODO: write CompileProcess instance
-#           This will loop on the queue (abort and stop all watchers on CTRL-C)
-#           And it will spawn a PROCESS each time a compile is required.
-#           Because we cannot pass fn's any other way -- recompute context on each compile FORK
-#           Pass arg indicating which file to recompile, None to recompile ALL
-#
-#           Ahead of compile, attempt emptying the queue, doing pre-event work for each event
-#           Ahead of scheduling the compile.
-#           THEN compile  -- THIS CUTS DOWN ON NUMBER OF COMPILE RUNS
+    compiler.render_all(cfg, j2env)
