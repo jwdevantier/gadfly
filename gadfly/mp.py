@@ -223,7 +223,8 @@ def _compile_process(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Config) 
 def _exec_asset_handler(handler: Callable, asset_name: str, ctx: AssetCtx) -> None:
     cli.info(f"running asset {asset_name} handler")
     try:
-        handler(ctx)
+        with cwd(ctx.config.project_root):
+            handler(ctx)
     except Exception:
         cli.pp_exc()
         cli.pp_err_details(
