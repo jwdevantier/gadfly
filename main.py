@@ -9,7 +9,7 @@ import toml
 
 from gadfly import config
 from gadfly import mp
-from gadfly.utils import prompt_yes_no
+from gadfly.cli import prompt_yes_no
 from gadfly import genproject
 
 # CLI
