@@ -1,7 +1,7 @@
 
 from gadfly.config import Config
 from gadfly import config
-from typing import Union
+from typing import Union, Optional
 from pathlib import Path
 from hashlib import sha256
 from watchdog.events import FileSystemEvent
@@ -49,10 +49,28 @@ def output_path(config: Config, page_path: Path) -> Path:
     return config.output_path / fpath.parent / (fpath.name[:-len(".md")]) / "index.html"
 
 
+def prompt_yes_no(question: str, default: Optional[bool] = True) -> bool:
+    """Pose a question, accepting y|yes / n|no as answer"""
+    if not (isinstance(default, bool) or default is None):
+        raise TypeError("'default' must be None|True|False")
+    prompt = {True: "[Y/n]", False: "[y/N]", None: "[y/n]"}[default]
+    choices = {"y": True, "yes": True, "n": False, "no": False}
+    while True:
+        print(f"{question} {prompt}: ", end="", flush=True)
+        choice = input().lower()
+        if choice == "" and default is not None:
+            return default
+        elif choice in choices:
+            return choices[choice]
+        else:
+            print(f"  invalid input '{choice}', please respond with y/yes/n/no", flush=True)
+
+
 __all__ = [
     "file_sha256",
     "is_page",
     "delete_output",
     "page_path",
     "output_path",
+    "prompt_yes_no",
 ]
