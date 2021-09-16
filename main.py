@@ -52,6 +52,11 @@ def watch(watch_port: int = 5500):
 
 @app.callback()
 def main(silent: bool = False, project: Path = typer.Option(default=Path("."), help="project directory")):
+    # TODO: for most commands, we would want to check and enforce that the project directory exists
+    #       maybe a decorator ?
+    # install project directory as a path we look for modules in
+    # this permits handlers to be expressed as strings of the form "mod1.mod2:fn"
+    sys.path.insert(1, str(project.absolute()))
     conf_path = project.absolute() / "gadfly.toml"
     if not conf_path.exists():
         print(f"No {conf_path.name} in {conf_path.parent}.")

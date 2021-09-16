@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Union
+from gadfly import assets
 
 DEFAULT_CONFIG = """\
 [project]
@@ -21,17 +22,6 @@ output = "output"
 # [assets.css]
 # command = "npx postcss-cli {file} --dir {output}/css/{file.name}"
 """
-
-
-class AssetHandler:
-    def __init__(self, opts: dict):
-        if "handler" in opts:
-            self.handler = opts["handler"]
-        elif "command" in opts:
-            self.handler = ""
-
-    def handle(self, file):
-        pass
 
 
 class Config:
@@ -118,73 +108,27 @@ class Config:
         return self.__repr__()
 
 
-class AssetValidationError(Exception):
-    def __init__(self, asset_name: str, asset_path: Path, message: str):
-        self.asset_name = asset_name
-        self.asset_path = asset_path
-        super().__init__(f"error in asset '{asset_name}' entry: {message}")
-
-
-class AssetHandlerAndCommandError(AssetValidationError):
-    def __init__(self, asset_name: str, asset_path: Path):
-        super().__init__(
-            asset_name, asset_path,
-            f"asset entry has both a 'command' and a 'handler' entry - choose one")
-
-
-class AssetCommandKeyError(AssetValidationError):
-    def __init__(self, asset_name: str, asset_path: Path, key: str):
-        self.key = key
-        super().__init__(
-            asset_name, asset_path,
-            f"command uses key '{key}' which is not a provided during evaluation"
-        )
-
-
-class AssetPathNotExists(AssetValidationError):
-    def __init__(self, asset_name: str, asset_path: Path):
-        super().__init__(asset_name, asset_path, f"path '{asset_path}' does not exist")
-
-
-class AssetPathNotADir(AssetValidationError):
-    def __init__(self, asset_name: str, asset_path: Path):
-        super().__init__(asset_name, asset_path, f"path '{asset_path}' does not a directory")
-
-
 def read_config(project_path: Path, conf_dict: dict) -> Config:
     project_root: Path = project_path.absolute()
     # TODO: check project_root, must exist and be a directory
-    assets = conf_dict.get("assets", {})
-    for asset_name, opts in assets.items():
+    conf_assets = conf_dict.get("assets", {})
+    for asset_name, opts in conf_assets.items():
         asset_path = project_root / opts.get("dir", asset_name)
-        if not asset_path.exists():
-            raise AssetPathNotExists(asset_name, asset_path)
-        elif not asset_path.is_dir():
-            raise AssetPathNotADir(asset_name, asset_path)
-        if "command" in opts and "handler" in opts:
-            raise AssetHandlerAndCommandError(asset_name, asset_path)
-        if "handler" in opts:
-            # could try to resolve string to a module attr, but this can change
-            # later on anyway as code is changed while the watch-loop runs.
-            pass
-        elif "command" in opts:
-            # ensure we aren't using any vars not provided
-            try:
-                # TODO: provide keys which we intend to evaluate a command string
-                #       with here.
-                opts["command"].format(file=Path(""), output=Path(""))
-            except KeyError as e:
-                raise AssetCommandKeyError(asset_name, asset_path, str(e).strip("'")) from KeyError
-            pass
         # write asset path back to asset's opts. will use this later when starting
         # asset listeners.
         opts["dir"] = asset_path
+        if not asset_path.exists():
+            raise assets.AssetPathNotExistsError(asset_name, asset_path)
+        elif not asset_path.is_dir():
+            raise assets.AssetPathNotADirError(asset_name, asset_path)
+        elif not "handler" in opts:
+            raise assets.AssetHandlerMissingError(asset_name, asset_path)
 
     return Config(
         project_root=project_root,
         **{k: v for k,v in conf_dict.get("project", {}).items()
            if k in {"pages", "templates", "code", "output"}},
-        **{"assets": assets}
+        **{"assets": conf_assets}
     )
 
 
