@@ -17,6 +17,7 @@ from gadfly import cli
 from gadfly.cli import colors
 from queue import Empty as QueueEmpty
 from dataclasses import dataclass
+import time
 
 
 class EventType:
@@ -257,7 +258,7 @@ def _asset_compile_process_inner(queue: mp.Queue, cfg: config.Config) -> None:
 
     # trigger a once-over compile
     for asset_name, handler in handlers.items():
-        ctx = AssetCtx(config=cfg, asset_dir=cfg.assets[asset_name]["dir"], dev_mode=True)
+        ctx = AssetCtx(config=cfg, asset_dir=cfg.assets[asset_name]["dir"], dev_mode=cfg.dev_mode)
         _exec_asset_handler(handler, asset_name, ctx)
     while True:
         event = queue.get(block=True)
@@ -267,7 +268,7 @@ def _asset_compile_process_inner(queue: mp.Queue, cfg: config.Config) -> None:
             handler = handlers[asset_name]
             opts = event["payload"]["asset_opts"]
             ctx = AssetCtx(config=cfg, asset_dir=opts["dir"],
-                           file=event["payload"]["file"], dev_mode=True)
+                           file=event["payload"]["file"], dev_mode=cfg.dev_mode)
             _exec_asset_handler(handler, asset_name, ctx)
         elif action == EventType.STOP:
             return
@@ -389,10 +390,24 @@ def compile_watch(cfg: config.Config) -> None:
 
 
 def compile_once(cfg: config.Config) -> None:
-    if not isinstance(cfg, config.Config):
-        raise RuntimeError(f"expected Config, got {type(cfg)}")
-    config.context = _eval_context(cfg)
-    # initialize templating engine instance
-    j2env = compiler.get_j2env(cfg)
-    # render all pages using the newly computed context.
-    compiler.render_all(cfg, j2env)
+    # We setup both processes as in watch-mode, execute them and immediately
+    # afterwards send a STOP message which they will obey as soon as they would
+    # enter watch-mode.
+    #
+    # Doing this ensures both compile steps behave similarly and cuts down on
+    # code duplication.
+    ctx = mp.get_context("spawn")
+    page_queue = ctx.Queue()
+    asset_queue = ctx.Queue()
+    stop_queue = ctx.Queue()
+    processes = [
+        ConsumerProcess(target=_compile_process, input_queue=page_queue, args=(stop_queue, cfg)),
+        ConsumerProcess(target=_asset_compile_process, input_queue=asset_queue, args=(stop_queue, cfg))
+    ]
+    for cp in processes:
+        p = cp.spawn(ctx=ctx)
+        p.start()
+    # avoid a race condition error from the runtime itself
+    time.sleep(1)
+    for cp in processes:
+        cp.stop()

@@ -25,7 +25,6 @@ output = "output"
 
 
 class Config:
-
     def __init__(self,
                  project_root: Path,
                  silent: bool = False,
@@ -33,15 +32,17 @@ class Config:
                  output: str = "output",
                  templates: str = "templates",
                  code: str = "code",
-                 assets: dict = None):
+                 assets: dict = None,
+                 dev_mode: bool = True):
         self.__project_root = project_root.absolute()
-        self.assets = assets
+        self.silent = silent
         self.pages_path = pages
         self.output_path = output
         self.templates_path = templates
         self.user_code_path = code
+        self.assets = assets
+        self.dev_mode = dev_mode
 
-        self.silent = silent
         self.context = {}
         self.page_md = {}
 

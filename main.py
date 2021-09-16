@@ -25,6 +25,8 @@ def compile():
     """
     Do a single compile.
     """
+    cfg = config.config
+    cfg.dev_mode = False
     mp.compile_once(config.config)
 
 
@@ -33,6 +35,8 @@ def watch(watch_port: int = 5500):
     """
     Watch for changes and recompile when needed.
     """
+    cfg = config.config
+    cfg.dev_mode = True
     def _serve():
         Server().serve(root=config.config.output_path, port=watch_port)
 
