@@ -13,6 +13,7 @@ class EventType:
     CONTEXT_CHANGED = "context_changed"
     PAGE_CHANGED = "page_changed"
     TEMPLATE_CHANGED = "template_changed"
+    ASSET_CHANGED = "asset_changed"
     STOP = "stop"
 
 
@@ -83,6 +84,24 @@ class TemplateEventHandler(BaseEventHandler):
         if event.is_directory:
             return
         self.send_event(EventType.TEMPLATE_CHANGED, {})
+
+
+class AssetEventHandler(BaseEventHandler):
+    def __init__(self, queue: mp.Queue, asset_name: str, asset_opts: dict):
+        super().__init__(queue)
+        self.asset_name = asset_name
+        # no validation here, validation happens at the point of reading in
+        # the configuration files.
+        self.asset_opts = asset_opts
+
+    def on_modified(self, event: FileSystemEvent):
+        if event.is_directory:
+            return
+        self.send_event(EventType.ASSET_CHANGED, {
+            "file": event.src_path,
+            "asset_name": self.asset_name,
+            "asset_opts": self.asset_opts,
+        })
 
 
 def _eval_context(cfg: config.Config):
@@ -173,6 +192,12 @@ def compile_watch(cfg: config.Config) -> None:
         str(cfg.templates_path.absolute()),
         recursive=True
     )
+    for asset_name, asset_opts in cfg.assets.items():
+        observer.schedule(
+            AssetEventHandler(queue, asset_name, asset_opts),
+            str(asset_opts["dir"]),
+            recursive=True
+        )
     observer.start()
 
     stop_queue = ctx.Queue()
