@@ -9,7 +9,7 @@ import toml
 
 from gadfly import config
 from gadfly import mp
-from gadfly.cli import prompt_yes_no
+from gadfly import cli
 from gadfly import genproject
 
 # CLI
@@ -60,24 +60,23 @@ def main(silent: bool = False, project: Path = typer.Option(default=Path("."), h
     conf_path = project.absolute() / "gadfly.toml"
     if not conf_path.exists():
         print(f"No {conf_path.name} in {conf_path.parent}.")
-        if prompt_yes_no("Create 'gadfly.toml' ?"):
+        if cli.prompt_yes_no("Create 'gadfly.toml' ?"):
             genproject.genconf(conf_path)
         else:
             print("oh... OK...")
             return
 
     try:
-        conf_dict = toml.load(conf_path)  # TODO: catch errors
-    except toml.TomlDecodeError as e:
-        print("")
-        print(f"Fatal: failed to read '{Path.cwd() / conf_path}', invalid TOML syntax")
-        print(e)
+        conf_dict = toml.load(conf_path)
+    except toml.TomlDecodeError:
+        cli.pp_exc()
+        cli.pp_err_details(f"Failed to read TOML config, invalid syntax", {
+            "Project": (Path.cwd() / conf_path).parent,
+            "File": (Path.cwd() / conf_path).name,
+        })
         sys.exit(1)
-    print("CONF")
-    print(repr(conf_dict))
     config.config = config.read_config(project.absolute(), conf_dict)
     config.config.silent = silent
-
 
 
 if __name__ == '__main__':
