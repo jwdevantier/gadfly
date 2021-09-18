@@ -48,6 +48,27 @@ def get_j2env(config: Config) -> Environment:
 Context = Dict[str, Any]
 
 
+def render_generated_page(page: Path, template: str, cfg: Config, env: Environment, ctx: Context):
+    """Generate page from path, template and given context."""
+    if page.is_absolute():
+        try:
+            # is_relative_to requires Python 3.9
+            page.relative_to(cfg.output_path)
+        except AttributeError:
+            # TODO: better error
+            raise RuntimeError(f"invalid path '{page}' - not contained in output_path")
+    else:
+        page = cfg.output_path / page
+    # find template
+    # TODO: error-check
+    template = env.get_template(template)
+    content = template.render(**ctx)
+    page.parent.mkdir(parents=True, exist_ok=True)
+    with open(page, "w") as fh:
+        info(f"generating page '{colors.B_MAGENTA}{page.relative_to(cfg.project_root)}{colors.B_WHITE}'")
+        fh.write(content)
+
+
 def compile_page(page: Path, config: Config, env: Environment):
     with open(page.absolute()) as fh:
         page_source = fh.read()

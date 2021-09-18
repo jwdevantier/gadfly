@@ -188,10 +188,18 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
     config.config = cfg
     # (re-)compute context, done once for duration of the compile-process' lifetime.
     cfg.context = _eval_context(cfg)
+    post_compile_hook = get_code_hook(cfg, cfg.code.post_compile_hook) or (lambda x: None)
+
     # initialize templating engine instance
     j2env = compiler.get_j2env(cfg)
+
+    def render_generated_page(page: str, template: str, context: dict) -> None:
+        compiler.render_generated_page(Path(page), template, cfg, j2env, context)
+
     # render all pages using the newly computed context.
     compiler.render_all(cfg, j2env)
+    post_compile_hook(cfg, render_generated_page)
+
     while True:
         event = queue.get(block=True)
         # Continue extracting events until queue empty OR STOP event received.
@@ -218,8 +226,10 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
         if action == EventType.PAGE_CHANGED:
             for page in pages:
                 compiler.render(cfg, j2env, Path(page))
+            post_compile_hook(cfg, render_generated_page)
         elif action == EventType.TEMPLATE_CHANGED:
             compiler.render_all(cfg, j2env)
+            post_compile_hook(cfg, render_generated_page)
         elif action == EventType.CONTEXT_CHANGED:
             return
         else:
