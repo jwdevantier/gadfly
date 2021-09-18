@@ -3,8 +3,6 @@ from multiprocessing.connection import wait as mp_wait
 from multiprocessing.process import BaseProcess
 from multiprocessing.context import BaseContext
 import importlib
-from importlib.util import spec_from_file_location, module_from_spec
-from types import ModuleType
 from typing import Callable, Tuple, Dict, List
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent, FileSystemMovedEvent
@@ -144,37 +142,27 @@ class AssetEventHandler(BaseEventHandler):
         })
 
 
-def _load_module_from_fpath(mod_path: Path) -> ModuleType:
-    # NOTE: for relative imports etc to work, the module name must be set to match
-    # the file's name OR the parent directory if the file-name is "__init__.py"
-    mod_name = mod_path.parent.name if mod_path.name == "__init__.py" else mod_path.name
-    spec = spec_from_file_location(mod_name, mod_path)
-    mod = module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
 def _eval_context(cfg: config.Config) -> dict:
     # NOTE: _must_ be run within the context of a separate process.
     #       Otherwise, changes to modules would never take effect as the import
     #       system caches imports.
 
     # TODO: catch failure to load context file
-    mod = _load_module_from_fpath(cfg.user_code_file)
-    if hasattr(mod, "main") and callable(mod.main):
+    mod = importlib.import_module(cfg.code.module)
+    if hasattr(mod, cfg.code.context_hook) and callable(getattr(mod, cfg.code.context_hook)):
         try:
-            return mod.main(cfg)
+            return getattr(mod, cfg.code.context_hook)(cfg)
         except Exception:
             cli.pp_exc()
             cli.pp_err_details(
                 "Unhandled error while evaluating context, see stacktrace above for details",
-                {"context file": cfg.user_code_file, "function": "main"}
+                {"context file": cfg.code.module_path, "function": cfg.code.context_hook}
             )
             raise ConsumerProcessFatalError
     else:
         cli.pp_err_details(
             "invalid context -- expected a 'main' function in context file",
-            {"context file": cfg.user_code_file, "function": "main"})
+            {"context file": cfg.code.module_path, "function": cfg.code.context_hook})
         raise ConsumerProcessFatalError
 
 
@@ -345,7 +333,7 @@ def compile_watch(cfg: config.Config) -> None:
     )
     observer.schedule(
         ContextCodeHandler(page_queue),
-        str(cfg.user_code_path.absolute()),
+        str(cfg.code.module_path),
         recursive=True
     )
     observer.schedule(

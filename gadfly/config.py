@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import Union
 from gadfly import assets
+from importlib.util import find_spec
+from typing import Optional
+
 
 DEFAULT_CONFIG = """\
 [project]
@@ -24,6 +27,45 @@ output = "output"
 """
 
 
+class ConfigCodeSection:
+    def __init__(self, *,
+                 module: str = "blogcode",
+                 context_hook: str = "context",
+                 post_compile_hook: str = "post_compile"):
+        self.__module = module
+        mod = find_spec(module)
+        if mod is None:
+            raise ValueError(f"could not find module {module}")
+        self.__module_path = mod.origin
+        self.__context_hook = context_hook
+        self.__post_compile_hook = post_compile_hook
+
+    @property
+    def module(self) -> str:
+        return self.__module
+
+    @property
+    def module_path(self) -> str:
+        return self.__module_path
+
+    @property
+    def context_hook(self) -> str:
+        return self.__context_hook
+
+    @property
+    def post_compile_hook(self) -> str:
+        return self.__post_compile_hook
+
+    def __repr__(self):
+        attrs = ", ".join(f"""{attr}: {getattr(self, attr)}""" for attr in [
+            "module", "context_hook", "post_compile_hook"
+        ])
+        return f"<{type(self).__name__} {attrs}>"
+
+    def __str__(self):
+        return self.__repr__()
+
+
 class Config:
     def __init__(self,
                  project_root: Path,
@@ -31,7 +73,7 @@ class Config:
                  pages: str = "pages",
                  output: str = "output",
                  templates: str = "templates",
-                 code: str = "code",
+                 code: Optional[ConfigCodeSection] = None,
                  assets: dict = None,
                  dev_mode: bool = True):
         self.__project_root = project_root.absolute()
@@ -39,7 +81,7 @@ class Config:
         self.pages_path = pages
         self.output_path = output
         self.templates_path = templates
-        self.user_code_path = code
+        self.code = code if code is not None else ConfigCodeSection()
         self.assets = assets
         self.dev_mode = dev_mode
 
@@ -86,22 +128,10 @@ class Config:
     def templates_path(self, val: Union[str, Path]):
         self.__templates_path = self.__path_coerce("templates", val)
 
-    @property
-    def user_code_path(self) -> Path:
-        return self.__user_code_path
-
-    @user_code_path.setter
-    def user_code_path(self, val: Union[str, Path]):
-        self.__user_code_path = self.__path_coerce("code", val)
-
-    @property
-    def user_code_file(self) -> Path:
-        return self.user_code_path / "__init__.py"
-
     def __repr__(self):
         attr_vals = [
             f"{attr}: {getattr(self, attr)}"
-            for attr in ["project_root", "silent", "pages_path", "output_path", "templates_path", "user_code_path"]
+            for attr in ["project_root", "silent", "pages_path", "output_path", "templates_path", "code"]
         ]
         return f"""<{type(self).__name__}, {", ".join(attr_vals)}>"""
 
@@ -125,11 +155,12 @@ def read_config(project_path: Path, conf_dict: dict) -> Config:
         elif "handler" not in opts:
             raise assets.AssetHandlerMissingError(asset_name, asset_path)
 
+    code_section = ConfigCodeSection(**conf_dict.get("code", {}))
     return Config(
         project_root=project_root,
         **{k: v for k, v in conf_dict.get("project", {}).items()
-           if k in {"pages", "templates", "code", "output"}},
-        **{"assets": conf_assets}
+           if k in {"pages", "templates", "output"}},
+        **{"assets": conf_assets, "code": code_section}
     )
 
 
