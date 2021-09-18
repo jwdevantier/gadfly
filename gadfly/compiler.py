@@ -77,7 +77,7 @@ def write_output_file(config: Config, page_path: Path, content: str):
     out_path = output_path(config, page_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as fh:
-        info(f"{colors.B_MAGENTA}{page_path.relative_to(config.project_root)}{colors.B_WHITE} -> {colors.B_MAGENTA}{out_path.relative_to(config.project_root)}{colors.B_WHITE}")
+        info(f"'{colors.B_MAGENTA}{page_path.relative_to(config.project_root)}{colors.B_WHITE}' -> '{colors.B_MAGENTA}{out_path.relative_to(config.project_root)}{colors.B_WHITE}'")
         fh.write(content)
 
 
