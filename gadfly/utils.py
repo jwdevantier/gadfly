@@ -1,16 +1,10 @@
 from gadfly.config import Config
-from gadfly import config
 from typing import Union
 from pathlib import Path
 from hashlib import sha256
 from watchdog.events import FileSystemEvent
 from contextlib import contextmanager
 import os
-
-
-def info(msg: str):
-    if not config.config.silent:
-        print(msg)
 
 
 def file_sha256(fpath: Union[str, Path]) -> str:

@@ -339,7 +339,7 @@ def compile_watch(cfg: config.Config) -> None:
         recursive=True
     )
     for asset_name, asset_opts in cfg.assets.items():
-        print(f"""{colors.RB_MAGENTA}> {colors.RB_WHITE}asset watcher {colors.RB_MAGENTA}{asset_name}{colors.RB_WHITE} (dir: {colors.RB_MAGENTA}{asset_opts["dir"]}{colors.RB_WHITE})""")
+        print(f"""{colors.B_MAGENTA}> {colors.B_WHITE}asset watcher {colors.B_MAGENTA}{asset_name}{colors.B_WHITE} (dir: {colors.B_MAGENTA}{asset_opts["dir"]}{colors.B_WHITE})""")
         observer.schedule(
             AssetEventHandler(asset_queue, asset_name, asset_opts),
             str(asset_opts["dir"]),

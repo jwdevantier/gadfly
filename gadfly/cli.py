@@ -6,35 +6,26 @@ import traceback
 class colors:
     """ANSI color escape codes"""
 
-    RESET = "\033[0m"
+    CLR = "\033[0m"
     BOLD = "\033[1m"
 
-    GREY = "\033[90m"
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE = "\033[94m"
-    MAGENTA = "\033[95m"
-    CYAN = "\033[96m"
-    WHITE = "\033[97m"
+    GREY = "\033[0m\033[90m"
+    RED = "\033[0m\033[91m"
+    GREEN = "\033[0m\033[92m"
+    YELLOW = "\033[0m\033[93m"
+    BLUE = "\033[0m\033[94m"
+    MAGENTA = "\033[0m\033[95m"
+    CYAN = "\033[0m\033[96m"
+    WHITE = "\033[0m\033[97m"
 
-    R_GREY = "\033[0m\033[90m"
-    R_RED = "\033[0m\033[91m"
-    R_GREEN = "\033[0m\033[92m"
-    R_YELLOW = "\033[0m\033[93m"
-    R_BLUE = "\033[0m\033[94m"
-    R_MAGENTA = "\033[0m\033[95m"
-    R_CYAN = "\033[0m\033[96m"
-    R_WHITE = "\033[0m\033[97m"
-
-    RB_GREY = "\033[0m\033[1m\033[90m"
-    RB_RED = "\033[0m\033[1m\033[91m"
-    RB_GREEN = "\033[0m\033[1m\033[92m"
-    RB_YELLOW = "\033[0m\033[1m\033[93m"
-    RB_BLUE = "\033[0m\033[1m\033[94m"
-    RB_MAGENTA = "\033[0m\033[1m\033[95m"
-    RB_CYAN = "\033[0m\033[1m\033[96m"
-    RB_WHITE = "\033[0m\033[1m\033[97m"
+    B_GREY = "\033[0m\033[1m\033[90m"
+    B_RED = "\033[0m\033[1m\033[91m"
+    B_GREEN = "\033[0m\033[1m\033[92m"
+    B_YELLOW = "\033[0m\033[1m\033[93m"
+    B_BLUE = "\033[0m\033[1m\033[94m"
+    B_MAGENTA = "\033[0m\033[1m\033[95m"
+    B_CYAN = "\033[0m\033[1m\033[96m"
+    B_WHITE = "\033[0m\033[1m\033[97m"
 
 
 def prompt_yes_no(question: str, default: Optional[bool] = True) -> bool:
@@ -59,17 +50,17 @@ def pp_exc():
     if typ is None and val is None and tb is None:
         raise RuntimeError("must be called from within an exception")
     exc_name = typ.__name__
-    print(f"{colors.RESET}{colors.BOLD}{colors.RED}--- {exc_name} Trace Begin ---{colors.RESET}")
+    print(f"{colors.CLR}{colors.BOLD}{colors.RED}--- {exc_name} Trace Begin ---{colors.CLR}")
     traceback.print_exception(typ, val, tb)
-    print(f"{colors.RESET}{colors.BOLD}{colors.RED}--- {exc_name} Trace End ---{colors.RESET}")
+    print(f"{colors.CLR}{colors.BOLD}{colors.RED}--- {exc_name} Trace End ---{colors.CLR}")
 
 
 def pp_err_details(msg: str, details: dict):
-    print(f"{colors.RB_RED}>{colors.RB_WHITE} {msg}")
+    print(f"{colors.B_RED}>{colors.B_WHITE} {msg}")
     for label, val in details.items():
-        print(f"  * {colors.RB_YELLOW}{str(label)}: {colors.RB_WHITE}{str(val)}")
-    print(f"{colors.RESET}", end="", flush=True)
+        print(f"  * {colors.B_YELLOW}{str(label)}: {colors.B_WHITE}{str(val)}")
+    print(f"{colors.CLR}", end="", flush=True)
 
 
 def info(msg: str):
-    print(f"{colors.RB_MAGENTA}> {colors.RB_WHITE}{msg}{colors.RESET}")
+    print(f"{colors.B_MAGENTA}> {colors.B_WHITE}{msg}{colors.CLR}")

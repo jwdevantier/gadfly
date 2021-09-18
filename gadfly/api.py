@@ -5,9 +5,9 @@ import subprocess
 
 def sh(cmd: str, echo=True, shell=True, check=False, desc=None, **kwargs) -> subprocess.CompletedProcess:
     if desc:
-        print(f"{colors.R_CYAN}{desc}{colors.RESET}")
+        print(f"{colors.CYAN}{desc}{colors.CLR}")
     if echo:
-        print(f"{colors.RB_GREEN}> {colors.R_BLUE}{cmd}{colors.RESET}")
+        print(f"{colors.B_GREEN}> {colors.BLUE}{cmd}{colors.CLR}")
 
     kwargs["shell"] = shell
     kwargs["check"] = check
