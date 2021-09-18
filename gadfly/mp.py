@@ -142,28 +142,45 @@ class AssetEventHandler(BaseEventHandler):
         })
 
 
+def get_code_hook(cfg: config.Config, hook_name: str) -> Optional[Callable]:
+    mod = importlib.import_module(cfg.code.module)
+    if not hasattr(mod, hook_name):
+        return None
+    hook = getattr(mod, hook_name)
+    if not callable(hook):
+        cli.pp_err_details(f"Invalid hook - {hook_name} is not a callable!",
+                           {"module": cfg.code.module,
+                            "module file": cfg.code.module_path,
+                            "symbol": hook_name,
+                            "symbol type": type(hook)})
+        raise ConsumerProcessFatalError
+    return hook
+
+
 def _eval_context(cfg: config.Config) -> dict:
     # NOTE: _must_ be run within the context of a separate process.
     #       Otherwise, changes to modules would never take effect as the import
     #       system caches imports.
 
     # TODO: catch failure to load context file
-    mod = importlib.import_module(cfg.code.module)
-    if hasattr(mod, cfg.code.context_hook) and callable(getattr(mod, cfg.code.context_hook)):
-        try:
-            return getattr(mod, cfg.code.context_hook)(cfg)
-        except Exception:
-            cli.pp_exc()
-            cli.pp_err_details(
-                "Unhandled error while evaluating context, see stacktrace above for details",
-                {"context file": cfg.code.module_path, "function": cfg.code.context_hook}
-            )
-            raise ConsumerProcessFatalError
-    else:
+    hook = get_code_hook(cfg, cfg.code.context_hook)
+    if hook is None:
         cli.pp_err_details(
-            "invalid context -- expected a 'main' function in context file",
-            {"context file": cfg.code.module_path, "function": cfg.code.context_hook})
+            f"invalid context -- expected a context hook function",
+            {"module": cfg.code.module,
+             "module file": cfg.code.module_path,
+             "hook": cfg.code.context_hook})
         raise ConsumerProcessFatalError
+    try:
+        return hook(cfg)
+    except Exception:
+        cli.pp_exc()
+        cli.pp_err_details(
+            "Unhandled error while evaluating context hook, see stacktrace above for details",
+            {"module": cfg.code.module,
+             "module file": cfg.code.module_path,
+             "hook": cfg.code.context_hook}
+        )
 
 
 def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Config) -> None:
