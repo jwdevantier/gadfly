@@ -158,11 +158,24 @@ def _eval_context(cfg: config.Config) -> dict:
     # NOTE: _must_ be run within the context of a separate process.
     #       Otherwise, changes to modules would never take effect as the import
     #       system caches imports.
+
+    # TODO: catch failure to load context file
     mod = _load_module_from_fpath(cfg.user_code_file)
     if hasattr(mod, "main") and callable(mod.main):
-        return mod.main(cfg)
+        try:
+            return mod.main(cfg)
+        except Exception:
+            cli.pp_exc()
+            cli.pp_err_details(
+                "Unhandled error while evaluating context, see stacktrace above for details",
+                {"context file": cfg.user_code_file, "function": "main"}
+            )
+            raise ConsumerProcessFatalError
     else:
-        raise RuntimeError(f"invalid context expected a 'main' function in {cfg.user_code_file}")
+        cli.pp_err_details(
+            "invalid context -- expected a 'main' function in context file",
+            {"context file": cfg.user_code_file, "function": "main"})
+        raise ConsumerProcessFatalError
 
 
 def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Config) -> None:
@@ -215,6 +228,8 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
 def _compile_process(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Config) -> None:
     try:
         _compile_process_inner(queue, stop_queue, cfg)
+    except ConsumerProcessFatalError:
+        stop_queue.put(1)
     except KeyboardInterrupt:
         # processing aborts in spite of not acting to the KeyboardInterrupt
         pass
