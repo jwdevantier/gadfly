@@ -12,9 +12,9 @@ class RenderPageFn:
 
 def sh(cmd: str, echo=True, shell=True, check=False, desc=None, **kwargs) -> subprocess.CompletedProcess:
     if desc:
-        print(f"{colors.CYAN}{desc}{colors.CLR}")
+        print(f"{colors.B_MAGENTA}> {colors.B_GREY}{desc}{colors.CLR}")
     if echo:
-        print(f"{colors.B_GREEN}> {colors.BLUE}{cmd}{colors.CLR}")
+        print(f"{colors.B_BLUE}> {colors.B_GREY}{cmd}{colors.CLR}")
 
     kwargs["shell"] = shell
     kwargs["check"] = check
