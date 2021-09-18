@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Union
-from gadfly import assets
+from gadfly.assets.errors import *
 from importlib.util import find_spec
 from typing import Optional
 
@@ -149,11 +149,11 @@ def read_config(project_path: Path, conf_dict: dict) -> Config:
         # asset listeners.
         opts["dir"] = asset_path
         if not asset_path.exists():
-            raise assets.AssetPathNotExistsError(asset_name, asset_path)
+            raise AssetPathNotExistsError(asset_name, asset_path)
         elif not asset_path.is_dir():
-            raise assets.AssetPathNotADirError(asset_name, asset_path)
+            raise AssetPathNotADirError(asset_name, asset_path)
         elif "handler" not in opts:
-            raise assets.AssetHandlerMissingError(asset_name, asset_path)
+            raise AssetHandlerMissingError(asset_name, asset_path)
 
     code_section = ConfigCodeSection(**conf_dict.get("code", {}))
     return Config(

@@ -11,6 +11,7 @@ from gadfly import config
 from gadfly import mp
 from gadfly import cli
 from gadfly import genproject
+from gadfly.assets.errors import *
 
 # CLI
 #  watch+dev server
@@ -83,7 +84,29 @@ def main(silent: bool = False, project: Path = typer.Option(default=Path("."), h
             "File": (Path.cwd() / conf_path).name,
         })
         sys.exit(1)
-    config.config = config.read_config(project.absolute(), conf_dict)
+
+    try:
+        config.config = config.read_config(project.absolute(), conf_dict)
+    except AssetPathNotExistsError as e:
+        cli.pp_exc()
+        cli.pp_err_details(
+            "asset does not exist, you may want to set the 'dir' key to specify the path to the asset directory",
+            {"asset": e.asset_name,
+             "path": e.asset_path}
+        )
+        sys.exit(1)
+    except AssetPathNotADirError as e:
+        cli.pp_exc()
+        cli.pp_err_details("asset path is not a directory",
+                           {"asset": e.asset_name, "path": e.asset_path})
+        sys.exit(1)
+    except AssetHandlerMissingError as e:
+        cli.pp_exc()
+        cli.pp_err_details(
+            "asset entry is missing a 'handler' entry",
+            {"asset": e.asset_name, "path": e.asset_path}
+        )
+        sys.exit(1)
     config.config.silent = silent
 
 
