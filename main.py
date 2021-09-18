@@ -48,6 +48,7 @@ def watch(watch_port: int = 5500):
     def on_ctrl_c(sig, frame):
         print("CTRL-C hit..")
         server.terminate()
+        print(f"{cli.colors.CLR}", end="", flush=True)
         sys.exit(0)
 
     signal.signal(signal.SIGINT, on_ctrl_c)
