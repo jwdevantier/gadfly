@@ -55,14 +55,13 @@ def compile_page(page: Path, config: Config, env: Environment):
     page_name = page.relative_to(config.pages_path)
     config.page_md[page_name] = {}
 
-    def update_page_md(data: dict) -> str:
-        config.page_md[page_name] = {**config.page_md[page_name], **data}
+    def md_assoc(**kwargs) -> str:
+        config.page_md[page_name] = {**config.page_md[page_name], **kwargs}
         return ""  # if None is returned, None is rendered in the output iff function is called directly
 
-    context = {**config.context,
-               "gf_page_name": page_name,
-               "gf_update_page_md": update_page_md}
-    res = env.from_string(page_source).render(**context)
+    template = env.from_string(page_source)
+    template.globals.update({"gf_page_name": page_name, "gf_md_assoc": md_assoc})
+    res = template.render(config.context)
     return re.sub("(^<P>|</P>$)", "", res, flags=re.IGNORECASE)
 
 
