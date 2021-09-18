@@ -122,12 +122,12 @@ def read_config(project_path: Path, conf_dict: dict) -> Config:
             raise assets.AssetPathNotExistsError(asset_name, asset_path)
         elif not asset_path.is_dir():
             raise assets.AssetPathNotADirError(asset_name, asset_path)
-        elif not "handler" in opts:
+        elif "handler" not in opts:
             raise assets.AssetHandlerMissingError(asset_name, asset_path)
 
     return Config(
         project_root=project_root,
-        **{k: v for k,v in conf_dict.get("project", {}).items()
+        **{k: v for k, v in conf_dict.get("project", {}).items()
            if k in {"pages", "templates", "code", "output"}},
         **{"assets": conf_assets}
     )
