@@ -37,8 +37,11 @@ def watch(watch_port: int = 5500):
     """
     cfg = config.config
     cfg.dev_mode = True
+
     def _serve():
-        Server().serve(root=config.config.output_path, port=watch_port)
+        s = Server()
+        s.watch(f"{config.config.output_path}/**")
+        s.serve(root=config.config.output_path, port=watch_port)
 
     server = Process(target=_serve)
 
