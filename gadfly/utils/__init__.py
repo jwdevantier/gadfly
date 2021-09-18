@@ -41,6 +41,8 @@ def output_path(config: Config, page_path: Path) -> Path:
     if not page_path.suffix == ".md":
         raise RuntimeError("expected markdown file")
     fpath = page_path.relative_to(config.pages_path)
+    if fpath.name == "index.md":
+        return config.output_path / fpath.parent / f"""{fpath.name[:-len(".md")]}.html"""
     return config.output_path / fpath.parent / (fpath.name[:-len(".md")]) / "index.html"
 
 

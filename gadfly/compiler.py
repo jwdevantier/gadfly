@@ -8,6 +8,7 @@ from pathlib import Path
 from os import walk
 from gadfly.config import Config
 from gadfly.cli import info, colors
+from gadfly.utils import output_path
 from markdown_it import MarkdownIt
 
 md = MarkdownIt()
@@ -45,25 +46,6 @@ def get_j2env(config: Config) -> Environment:
 
 
 Context = Dict[str, Any]
-
-
-def page_path(config: Config, output_path: Path) -> Path:
-    if not output_path.suffix == ".html":
-        raise RuntimeError("expected html file")
-    fpath = output_path.relative_to(config.output_path)
-    if fpath.name == "index.html":
-        fpath = Path(*fpath.parts[:-2]) / (fpath.parts[-2] + ".md")
-    else:
-        fpath = fpath.parent / (fpath.name[:-len(fpath.suffix)] + ".md")
-    fpath = config.pages_path / fpath
-    return fpath
-
-
-def output_path(config: Config, page_path: Path) -> Path:
-    if not page_path.suffix == ".md":
-        raise RuntimeError("expected markdown file")
-    fpath = page_path.relative_to(config.pages_path)
-    return config.output_path / fpath.parent / (fpath.name[:-len(".md")]) / "index.html"
 
 
 def compile_page(page: Path, config: Config, env: Environment):
