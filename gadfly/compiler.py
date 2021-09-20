@@ -62,7 +62,7 @@ def render_generated_page(page: Path, template: str, cfg: Config, env: Environme
     # find template
     # TODO: error-check
     template = env.get_template(template)
-    content = template.render(**ctx)
+    content = template.render(**{**cfg.context, **ctx})
     page.parent.mkdir(parents=True, exist_ok=True)
     with open(page, "w") as fh:
         info(f"generating page '{colors.B_MAGENTA}{page.relative_to(cfg.project_root)}{colors.B_WHITE}'")
