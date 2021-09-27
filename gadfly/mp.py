@@ -299,7 +299,7 @@ def _asset_compile_process_inner(queue: mp.Queue, cfg: config.Config) -> None:
             handler = handlers[asset_name]
             opts = event["payload"]["asset_opts"]
             ctx = AssetCtx(config=cfg, asset_dir=opts["dir"],
-                           file=event["payload"]["file"], dev_mode=cfg.dev_mode)
+                           file=Path(event["payload"]["file"]), dev_mode=cfg.dev_mode)
             _exec_asset_handler(handler, asset_name, ctx)
         elif action == EventType.STOP:
             return
