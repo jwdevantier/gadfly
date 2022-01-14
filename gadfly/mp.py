@@ -188,7 +188,7 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
     config.config = cfg
     # (re-)compute context, done once for duration of the compile-process' lifetime.
     cfg.context = _eval_context(cfg)
-    post_compile_hook = get_code_hook(cfg, cfg.code.post_compile_hook) or (lambda x: None)
+    post_compile_hook = get_code_hook(cfg, cfg.code.post_compile_hook) or (lambda x, y: None)
 
     # initialize templating engine instance
     j2env = compiler.get_j2env(cfg)
