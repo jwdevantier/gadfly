@@ -92,14 +92,17 @@ class Config:
     def project_root(self) -> Path:
         return self.__project_root
 
-    def __path_coerce(self, label: str, val: Union[str, Path]) -> Path:
+    def __path_coerce(self, label: str, val: Union[str, Path], create: bool = False) -> Path:
         if isinstance(val, str):
             val = Path(val)
         new_val = (self.project_root / val).resolve()
         if new_val == self.project_root:
             raise ValueError(f"invalid {label} dir, path '{val}' resolves to the project directory")
         if not new_val.exists():
-            raise ValueError(f"invalid {label} dir, '{new_val}' does not exist!")
+            if create:
+                new_val.mkdir(parents=True, exist_ok=True)
+            else:
+                raise ValueError(f"invalid {label} dir, '{new_val}' does not exist!")
         elif not new_val.is_dir():
             raise ValueError(f"invalid {label} dir, '{new_val}' is not a directory!")
         return new_val
@@ -118,7 +121,7 @@ class Config:
 
     @output_path.setter
     def output_path(self, val: Union[str, Path]):
-        self.__output_path = self.__path_coerce("output", val)
+        self.__output_path = self.__path_coerce("output", val, create=True)
 
     @property
     def templates_path(self) -> Path:
