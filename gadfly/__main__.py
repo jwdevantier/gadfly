@@ -59,11 +59,13 @@ def watch(watch_port: int = 5500):
 
 
 @app.callback()
-def main(silent: bool = False, project: Path = typer.Option(default=Path("."), help="project directory")):
+def _pre_command(silent: bool = False, project: Path = typer.Option(default=Path(".."), help="project directory")):
     # TODO: for most commands, we would want to check and enforce that the project directory exists
     #       maybe a decorator ?
     # install project directory as a path we look for modules in
     # this permits handlers to be expressed as strings of the form "mod1.mod2:fn"
+    print("HELLO")
+    print(project)
     sys.path.insert(1, str(project.absolute()))
     conf_path = project.absolute() / "gadfly.toml"
     if not conf_path.exists():
@@ -109,7 +111,11 @@ def main(silent: bool = False, project: Path = typer.Option(default=Path("."), h
     config.config.silent = silent
 
 
-if __name__ == '__main__':
+def main():
     if len(sys.argv) == 1:
         sys.argv.append("--help")
     app()
+
+
+if __name__ == '__main__':
+    main()
