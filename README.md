@@ -1,23 +1,47 @@
-# Gadfly
 An in-progress static site generator.
 
 ## Why ?
-Most static site generators are built around a series of assumptions which
-may or may not fit your use-case.
+Gadfly tries to provide as much of a scaffold for easy static site generation
+*without* inventing a lot of structure for you to observe.
+Having run into trouble with several static site generators assuming a certain 
+structure or failing to support my use-cases, I decided to build as minimally
+opinionated a generator as I could.
 
-Having tried and run into troubles with several such systems, I decided to build
-a non-opinionated system which just provides a compiler, the ability to watch for
-changes and a dev-server which reloads the page if it is changed.
+With Gadfly, pages are placed in a (configurably named) page directory,
+and a development server can monitor changes to pages and/or any number
+of assets directories - triggering recompilation and a browser refresh.
 
-Pages use jinja2 templating and support a custom markdown block - this permits
-you to write markdown where desired, but emit plain, un-changed HTML where desired
-or to express and use reusable jinja2 blocks.
+Pages themselves are jinja2 documents whose context environment is
+given by you via a configurable hook function. Furthermore, the environment
+is augmented with a markdown block tag, allowing you to effortlessly switch
+between jinja2-code, HTML and markdown as fits the use-case.
 
-Furthermore, all pages are compiled within a context - the context is produced
-by a regular python function in `blogcode/__init__.py` and thus permits you to
-use Python in full when computing the page context - no half-baked DSL's, no
-limited set of framework-provided functions and/or variables.
+You can also define as many asset directories as you want and for each
+of them associate a handler function detailing how to compile the asset type.
+This permits you to call out to specific CSS or javascript compilers as part of
+the asset generation step.
 
+The flexibility does come with a bit more work. Gadfly won't generate any
+standard index page or any pages for browsing tags, or filter out pages
+which are yet to be published.
+However, by giving you full access to Python and a flexible set of hooks
+into the compilation process, you can do all of this yourself and _exactly_ to
+your liking.
+
+## Installing
+### (Regular) use
+```
+$ pip install --user .
+```
+
+### Development
+If you wish to modify Gadfly itself, then do the following to make changes made
+to Gadfly's code be reflected to the installed package:
+```
+$ python3 -m venv --system-site-packages .venv
+$ source .venv/bin/activate
+(venv) $ pip install --user --editable .
+```
 ## Getting started
 A project directory should have the following structure:
 
