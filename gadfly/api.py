@@ -1,6 +1,7 @@
 from gadfly.utils import file_sha256, cwd
 from gadfly.cli import colors, pp_exc, pp_err_details
 from gadfly import Config
+from gadfly.page_hooks_api import PagePreCompileHookFn, PagePostCompileHookFn
 from typing import Dict, Any
 import subprocess
 

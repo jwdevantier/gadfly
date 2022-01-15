@@ -3,7 +3,7 @@ from multiprocessing.connection import wait as mp_wait
 from multiprocessing.process import BaseProcess
 from multiprocessing.context import BaseContext
 import importlib
-from typing import Callable, Tuple, Dict, List
+from typing import Callable, Tuple, Dict, List, cast
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent, FileSystemMovedEvent
 from gadfly.utils import *
@@ -13,6 +13,7 @@ from gadfly.assets.errors import *
 from gadfly.assets.ctx import AssetCtx
 from gadfly import cli
 from gadfly.cli import colors
+from gadfly.page_hooks_api import *
 from queue import Empty as QueueEmpty
 from dataclasses import dataclass
 import time
@@ -183,12 +184,24 @@ def _eval_context(cfg: config.Config) -> dict:
         )
 
 
+def page_pre_compile_noop(page_path: Path, config: config.Config, extra_vars: Dict) -> bool:
+    return True
+
+
+def page_post_compile_noop(page_path: Path, config: config.Config, page_content: str) -> Optional[str]:
+    return page_content
+
+
 def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Config) -> None:
     # this globally assigned variable is not set in the new process.
     config.config = cfg
     # (re-)compute context, done once for duration of the compile-process' lifetime.
     cfg.context = _eval_context(cfg)
-    post_compile_hook = get_code_hook(cfg, cfg.code.post_compile_hook) or (lambda x, y: None)
+    post_compile_hook = get_code_hook(cfg, cfg.code.post_compile_hook) or (lambda *args, **kwargs: None)
+    page_pre_compile_hook: PagePreCompileHookFn = \
+        cast(PagePreCompileHookFn, get_code_hook(cfg, cfg.code.page_pre_compile_hook)) or page_pre_compile_noop
+    page_post_compile_hook: PagePostCompileHookFn = \
+        cast(PagePostCompileHookFn, get_code_hook(cfg, cfg.code.page_post_compile_hook)) or page_post_compile_noop
 
     # initialize templating engine instance
     j2env = compiler.get_j2env(cfg)
@@ -197,7 +210,7 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
         compiler.render_generated_page(Path(page), template, cfg, j2env, context)
 
     # render all pages using the newly computed context.
-    compiler.render_all(cfg, j2env)
+    compiler.render_all(cfg, j2env, page_pre_compile_hook, page_post_compile_hook)
     post_compile_hook(cfg, render_generated_page)
 
     while True:
@@ -225,10 +238,10 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
             pass
         if action == EventType.PAGE_CHANGED:
             for page in pages:
-                compiler.render(cfg, j2env, Path(page))
+                compiler.render(cfg, j2env, Path(page), page_pre_compile_hook, page_post_compile_hook)
             post_compile_hook(cfg, render_generated_page)
         elif action == EventType.TEMPLATE_CHANGED:
-            compiler.render_all(cfg, j2env)
+            compiler.render_all(cfg, j2env, page_pre_compile_hook, page_post_compile_hook)
             post_compile_hook(cfg, render_generated_page)
         elif action == EventType.CONTEXT_CHANGED:
             return

@@ -31,7 +31,9 @@ class ConfigCodeSection:
     def __init__(self, *,
                  module: str = "blogcode",
                  context_hook: str = "context",
-                 post_compile_hook: str = "post_compile"):
+                 post_compile_hook: str = "post_compile",
+                 page_pre_compile_hook: str = "page_pre_compile_hook",
+                 page_post_compile_hook: str = "page_post_compile_hook"):
         self.__module = module
         mod = find_spec(module)
         if mod is None:
@@ -39,6 +41,8 @@ class ConfigCodeSection:
         self.__module_path = mod.origin
         self.__context_hook = context_hook
         self.__post_compile_hook = post_compile_hook
+        self.__page_pre_compile_hook = page_pre_compile_hook
+        self.__page_post_compile_hook = page_post_compile_hook
 
     @property
     def module(self) -> str:
@@ -56,9 +60,17 @@ class ConfigCodeSection:
     def post_compile_hook(self) -> str:
         return self.__post_compile_hook
 
+    @property
+    def page_pre_compile_hook(self) -> str:
+        return self.__page_pre_compile_hook
+
+    @property
+    def page_post_compile_hook(self) -> str:
+        return self.__page_post_compile_hook
+
     def __repr__(self):
         attrs = ", ".join(f"""{attr}: {getattr(self, attr)}""" for attr in [
-            "module", "context_hook", "post_compile_hook"
+            "module", "context_hook", "post_compile_hook", "page_pre_compile_hook", "page_post_compile_hook"
         ])
         return f"<{type(self).__name__} {attrs}>"
 

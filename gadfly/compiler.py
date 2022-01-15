@@ -3,12 +3,13 @@ from jinja2.ext import Extension
 from jinja2.parser import Parser
 from jinja2.runtime import Macro
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pathlib import Path
 from os import walk
 from gadfly.config import Config
 from gadfly.cli import info, colors
 from gadfly.utils import output_path
+from gadfly.page_hooks_api import *
 from markdown_it import MarkdownIt
 
 md = MarkdownIt()
@@ -69,29 +70,33 @@ def render_generated_page(page: Path, template: str, cfg: Config, env: Environme
         fh.write(content)
 
 
-def compile_page(page: Path, config: Config, env: Environment):
+def compile_page(page: Path, config: Config, env: Environment, page_vars: Optional[Dict] = None):
+    """Generate HTML output from page.
+
+    Args:
+        page: path to the page file (.md) with the content
+        config: gadfly config
+        env: Jinja2 environment
+        page_vars: additional variables to make available to the templating environment for this page only.
+
+    Returns:
+        the generated HTML output as a string
+    """
     with open(page.absolute()) as fh:
         page_source = fh.read()
     # Enrich context with page-specific vars
     page_name = page.relative_to(config.pages_path)
-    config.page_md[page_name] = {}
 
     def md_assoc(**kwargs) -> str:
         config.page_md[page_name] = {**config.page_md[page_name], **kwargs}
         return ""  # if None is returned, None is rendered in the output iff function is called directly
 
     template = env.from_string(page_source)
+    if page_vars:
+        template.globals.update(**page_vars)
     template.globals.update({"gf_page_name": page_name, "gf_md_assoc": md_assoc})
     res = template.render(config.context)
     return re.sub("(^<P>|</P>$)", "", res, flags=re.IGNORECASE)
-
-
-def compile_all(config: Config, env: Environment):
-    for dirpath, dir_names, file_names in walk(config.pages_path):
-        for filename in file_names:
-            if filename.endswith(".md"):
-                fpath = (Path(dirpath) / filename)
-                yield fpath, compile_page(fpath, config, env)
 
 
 def write_output_file(config: Config, page_path: Path, content: str):
@@ -102,11 +107,47 @@ def write_output_file(config: Config, page_path: Path, content: str):
         fh.write(content)
 
 
-def render(config: Config, env: Environment, page: Path):
-    content = compile_page(page, config, env)
-    write_output_file(config, page, content)
+def unlink_output_file(config: Config, page_path: Path):
+    out_path = output_path(config, page_path)
+    out_path.unlink(missing_ok=True)
+    page_dir = out_path.parent
+    if page_dir.exists():
+        out_path.parent.rmdir()
 
 
-def render_all(config: Config, env: Environment):
-    for page_path, content in compile_all(config, env):
-        write_output_file(config, page_path, content)
+def render(config: Config, env: Environment, page_path: Path,
+           page_pre_compile_hook: PagePreCompileHookFn,
+           page_post_compile_hook: PagePostCompileHookFn) -> None:
+    # clear page metadata before compilation
+    config.page_md[page_path.relative_to(config.pages_path)] = {}
+
+    # call per-page pre-compile hook, can create extra vars to inject into the template-rendering
+    # context for this page, cause compilation to be skipped and set page metadata (if desired)
+    extra_vars = {}
+    if not page_pre_compile_hook(page_path, config, extra_vars):
+        # filtered out, abort
+        unlink_output_file(config, page_path)
+        config.page_md[page_path.relative_to(config.pages_path)] = {}
+        return
+
+    content = compile_page(page_path, config, env, page_vars=extra_vars)
+
+    content = page_post_compile_hook(page_path, config, content)
+    if content in (False, None):
+        # filtered out, abort
+        # clear out any MD that might have been set as part of the compilation
+        unlink_output_file(config, page_path)
+        config.page_md[page_path.relative_to(config.pages_path)] = {}
+        return
+
+    write_output_file(config, page_path, content)
+
+
+def render_all(config: Config, env: Environment,
+               page_pre_compile_hook: PagePreCompileHookFn,
+               page_post_compile_hook: PagePostCompileHookFn) -> None:
+    for dirpath, _dir_names, file_names in walk(config.pages_path):
+        for file_name in file_names:
+            if file_name.endswith(".md"):
+                page_path = Path(dirpath) / file_name
+                render(config, env, page_path, page_pre_compile_hook, page_post_compile_hook)
