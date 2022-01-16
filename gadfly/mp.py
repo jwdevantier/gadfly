@@ -204,13 +204,13 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
         cast(PagePostCompileHookFn, get_code_hook(cfg, cfg.code.page_post_compile_hook)) or page_post_compile_noop
 
     # initialize templating engine instance
-    j2env = compiler.get_j2env(cfg)
+    env = compiler.Environment(config=cfg)
 
     def render_generated_page(page: str, template: str, context: dict) -> None:
-        compiler.render_generated_page(Path(page), template, cfg, j2env, context)
+        compiler.render_generated_page(Path(page), template, cfg, env, context)
 
     # render all pages using the newly computed context.
-    compiler.render_all(cfg, j2env, page_pre_compile_hook, page_post_compile_hook)
+    compiler.render_all(cfg, env, page_pre_compile_hook, page_post_compile_hook)
     post_compile_hook(cfg, render_generated_page)
 
     while True:
@@ -238,10 +238,10 @@ def _compile_process_inner(queue: mp.Queue, stop_queue: mp.Queue, cfg: config.Co
             pass
         if action == EventType.PAGE_CHANGED:
             for page in pages:
-                compiler.render(cfg, j2env, Path(page), page_pre_compile_hook, page_post_compile_hook)
+                compiler.render(cfg, env, Path(page), page_pre_compile_hook, page_post_compile_hook)
             post_compile_hook(cfg, render_generated_page)
         elif action == EventType.TEMPLATE_CHANGED:
-            compiler.render_all(cfg, j2env, page_pre_compile_hook, page_post_compile_hook)
+            compiler.render_all(cfg, env, page_pre_compile_hook, page_post_compile_hook)
             post_compile_hook(cfg, render_generated_page)
         elif action == EventType.CONTEXT_CHANGED:
             return

@@ -1,8 +1,3 @@
-from jinja2 import Environment, FileSystemLoader, nodes
-from jinja2.ext import Extension
-from jinja2.parser import Parser
-from jinja2.runtime import Macro
-import re
 from typing import Dict, Any, Optional
 from pathlib import Path
 from os import walk
@@ -10,46 +5,37 @@ from gadfly.config import Config
 from gadfly.cli import info, colors
 from gadfly.utils import output_path
 from gadfly.page_hooks_api import *
-from markdown_it import MarkdownIt
-
-md = MarkdownIt()
-
-
-class MDExt(Extension):
-    tags = {"md", "markdown"}  # "markdown"
-
-    def __init__(self, environment: Environment):
-        super().__init__(environment)
-
-    def parse(self, parser: Parser):
-        tok = next(parser.stream)
-        lineno = tok.lineno
-        endtok = "name:endmd" if tok.value == "md" else "name:endmarkdown"
-        body = parser.parse_statements((endtok,), drop_needle=True)
-        return nodes.CallBlock(
-            self.call_method("_render_markdown"),
-            [], [], body
-        ).set_lineno(lineno)
-
-    def _render_markdown(self, caller: Macro):
-        block = caller()
-        return md.render(block).strip()
+from mako.template import Template
+from mako.lookup import TemplateLookup
 
 
-def get_j2env(config: Config) -> Environment:
-    j2loader = FileSystemLoader(searchpath=config.templates_path)
-    return Environment(
-        loader=j2loader,
-        auto_reload=True,
-        autoescape=False,
-        extensions=[MDExt]
-    )
+ContextDict = Dict[str, Any]
 
 
-Context = Dict[str, Any]
+class Environment:
+    def __init__(self, config: Config, module_directory: Optional[Path] = None):
+        # ensure we have directory to cache compiled templates
+        # TODO: each compile process creates a new dir...
+        # if module_directory is None:
+        #     tmp = tempfile.NamedTemporaryFile()
+        #     module_directory = Path(tmp.name)
+        #     tmp.close()
+        #     module_directory.mkdir(parents=True)
+        #
+        # self.module_directory = module_directory
+        self.lookup = TemplateLookup(directories=[config.templates_path])
+        pass
+
+    def template_from_file(self, file_path: Path) -> Template:
+        # return Template(filename=str(file_path.absolute()),
+        #                 module_directory=self.module_directory)
+        return Template(
+            filename=str(file_path.absolute()),
+            lookup=self.lookup
+        )
 
 
-def render_generated_page(page: Path, template: str, cfg: Config, env: Environment, ctx: Context):
+def render_generated_page(page: Path, template_path: str, cfg: Config, env: Environment, ctx: ContextDict):
     """Generate page from path, template and given context."""
     if page.is_absolute():
         try:
@@ -60,9 +46,8 @@ def render_generated_page(page: Path, template: str, cfg: Config, env: Environme
             raise RuntimeError(f"invalid path '{page}' - not contained in output_path")
     else:
         page = cfg.output_path / page
-    # find template
-    # TODO: error-check
-    template = env.get_template(template)
+
+    template = env.template_from_file(cfg.templates_path / template_path)
     content = template.render(**{**cfg.context, **ctx})
     page.parent.mkdir(parents=True, exist_ok=True)
     with open(page, "w") as fh:
@@ -70,20 +55,22 @@ def render_generated_page(page: Path, template: str, cfg: Config, env: Environme
         fh.write(content)
 
 
-def compile_page(page: Path, config: Config, env: Environment, page_vars: Optional[Dict] = None):
+def compile_page(page: Path, config: Config, env: Environment, page_vars: Optional[Dict] = None) -> str:
     """Generate HTML output from page.
 
     Args:
         page: path to the page file (.md) with the content
         config: gadfly config
-        env: Jinja2 environment
+        env: environment class (see compiler.py)
         page_vars: additional variables to make available to the templating environment for this page only.
 
     Returns:
         the generated HTML output as a string
     """
-    with open(page.absolute()) as fh:
-        page_source = fh.read()
+    render_ctx = {**config.context}
+    if page_vars is not None:
+        render_ctx.update(**page_vars)
+
     # Enrich context with page-specific vars
     page_name = page.relative_to(config.pages_path)
 
@@ -91,19 +78,20 @@ def compile_page(page: Path, config: Config, env: Environment, page_vars: Option
         config.page_md[page_name] = {**config.page_md[page_name], **kwargs}
         return ""  # if None is returned, None is rendered in the output iff function is called directly
 
-    template = env.from_string(page_source)
-    if page_vars:
-        template.globals.update(**page_vars)
-    template.globals.update({"gf_page_name": page_name, "gf_md_assoc": md_assoc})
-    res = template.render(config.context)
-    return re.sub("(^<P>|</P>$)", "", res, flags=re.IGNORECASE)
+    render_ctx.update({
+        "gf_page_name": page_name,
+        "gf_md_assoc": md_assoc,
+    })
+    template = env.template_from_file(page)
+    return template.render(**render_ctx)
 
 
 def write_output_file(config: Config, page_path: Path, content: str):
     out_path = output_path(config, page_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as fh:
-        info(f"'{colors.B_MAGENTA}{page_path.relative_to(config.project_root)}{colors.B_WHITE}' -> '{colors.B_MAGENTA}{out_path.relative_to(config.project_root)}{colors.B_WHITE}'")
+        info(
+            f"'{colors.B_MAGENTA}{page_path.relative_to(config.project_root)}{colors.B_WHITE}' -> '{colors.B_MAGENTA}{out_path.relative_to(config.project_root)}{colors.B_WHITE}'")
         fh.write(content)
 
 
