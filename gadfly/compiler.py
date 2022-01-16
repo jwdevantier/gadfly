@@ -5,34 +5,11 @@ from gadfly.config import Config
 from gadfly.cli import info, colors
 from gadfly.utils import output_path
 from gadfly.page_hooks_api import *
-from mako.template import Template
-from mako.lookup import TemplateLookup
+from gadfly.template_runtime import Environment
+from mako.runtime import UNDEFINED
 
 
 ContextDict = Dict[str, Any]
-
-
-class Environment:
-    def __init__(self, config: Config, module_directory: Optional[Path] = None):
-        # ensure we have directory to cache compiled templates
-        # TODO: each compile process creates a new dir...
-        # if module_directory is None:
-        #     tmp = tempfile.NamedTemporaryFile()
-        #     module_directory = Path(tmp.name)
-        #     tmp.close()
-        #     module_directory.mkdir(parents=True)
-        #
-        # self.module_directory = module_directory
-        self.lookup = TemplateLookup(directories=[config.templates_path])
-        pass
-
-    def template_from_file(self, file_path: Path) -> Template:
-        # return Template(filename=str(file_path.absolute()),
-        #                 module_directory=self.module_directory)
-        return Template(
-            filename=str(file_path.absolute()),
-            lookup=self.lookup
-        )
 
 
 def render_generated_page(page: Path, template_path: str, cfg: Config, env: Environment, ctx: ContextDict):
@@ -48,7 +25,7 @@ def render_generated_page(page: Path, template_path: str, cfg: Config, env: Envi
         page = cfg.output_path / page
 
     template = env.template_from_file(cfg.templates_path / template_path)
-    content = template.render(**{**cfg.context, **ctx})
+    content = env.render(template, ctx)
     page.parent.mkdir(parents=True, exist_ok=True)
     with open(page, "w") as fh:
         info(f"generating page '{colors.B_MAGENTA}{page.relative_to(cfg.project_root)}{colors.B_WHITE}'")
@@ -75,6 +52,9 @@ def compile_page(page: Path, config: Config, env: Environment, page_vars: Option
     page_name = page.relative_to(config.pages_path)
 
     def md_assoc(**kwargs) -> str:
+        # filter entries with value 'None', makes it easier to call fn and only
+        # set an entry if it has a defined value.
+        kwargs = {key: val for key, val in kwargs.items() if val not in (None, UNDEFINED)}
         config.page_md[page_name] = {**config.page_md[page_name], **kwargs}
         return ""  # if None is returned, None is rendered in the output iff function is called directly
 
@@ -83,7 +63,7 @@ def compile_page(page: Path, config: Config, env: Environment, page_vars: Option
         "gf_md_assoc": md_assoc,
     })
     template = env.template_from_file(page)
-    return template.render(**render_ctx)
+    return env.render(template, render_ctx)
 
 
 def write_output_file(config: Config, page_path: Path, content: str):
