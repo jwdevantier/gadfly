@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Union, Dict, Any, Optional, Generator, Callable
+from typing import List, Union, Dict, Any, Optional, Generator, Callable, Tuple
 from re import (
     compile as re_compile,
     match as re_match,
@@ -24,6 +24,19 @@ rgx_template_tokens = re_compile(
 # name: the block identifier
 # args: None  OR whatever's between the outermost (), so '()' => '' and (x, y) => 'x, y'
 rgx_block_open = r"^[ \t\r\f\v]*%%[ \t\r\f\v]*(?P<name>/?[a-zA-Z]\w*)(?:\((?P<args>.*)\))?$"
+
+
+def _eval_args_str(args: str, ctx) -> Tuple[List[Any], Dict[str, Any]]:
+    code = f"""\
+def get_args(*args, **kwargs):
+    return (args, kwargs)
+
+_it = get_args({args})
+"""
+    tmp_ctx = {**ctx}
+    exec(code, tmp_ctx)
+    args, kwargs = tmp_ctx["_it"]
+    return list(args), kwargs
 
 
 class Tokenizer:
@@ -202,25 +215,24 @@ class TemplateSyntaxError(ValueError):
 
 
 CompileCSTFn = Callable[[list], None]
-BlockCompilerFn = Callable[[str, str, list, CodeBuilder, CompileCSTFn], None]
+BlockCompilerFn = Callable[[str, List[Any], Dict[str, Any], list], list]
 
 
 def block_compile_py(name: str,
-                     args: str,
-                     body_cst: list,
-                     code: CodeBuilder,
-                     compile: CompileCSTFn):
-    body_txt = "".join(cst_flatten(body_cst))
-    code.add_line(
-        f"""exec({repr(body_txt)}, context)"""
-    )
+                     args: List[Any],
+                     kwargs: Dict[str, Any],
+                     body_cst: list) -> list:
+    assert len(body_cst) == 1, f"""malformed body input {repr(body_cst)}"""
+    assert body_cst[0][0] == TokenType.TEXT, "expected text node"
+    _, code = body_cst[0]
+    return [TokenType.PY_BLOCK,
+            f"<% {code} %>"]
 
 
 def block_compile_doc(name: str,
-                      args: str,
-                      body_cst: list,
-                      code: CodeBuilder,
-                      compile: CompileCSTFn):
+                      args: List[Any],
+                      kwargs: Dict[str, Any],
+                      body_cst: list) -> list:
     # doc blocks are just for documenting the template, no processing needed
     pass
 
@@ -229,17 +241,17 @@ class Template:
     def __init__(self,
                  cst: list,
                  *contexts: Dict[str, Any],
-                 compilers: Optional[Dict[str, BlockCompilerFn]] = None):
+                 macros: Optional[Dict[str, BlockCompilerFn]] = None):
         # construct context from successively merging each given context dict
-        self.context = {}
+        self.__compile_time_context = {}
         for context in contexts:
-            self.context.update(context)
+            self.__compile_time_context.update(context)
 
         self._code = CodeBuilder()
         # use this to store/buffer output until required to flush it out (using `flush_output`)
         # this reduces the amount of code generated in the resulting render function
         self.__output_buffer = []
-        self.__block_compilers = compilers
+        self.__macros = macros
 
         code = self._code
         code.add_line("def render_function(context):")
@@ -260,7 +272,7 @@ class Template:
         self.__compile_body(
             cst if isinstance(cst[0], list) else [cst]
         )
-        self.flush_output()
+        self.__flush_output()
         code.add_line("""return "".join(result)""")
         code.dedent()
         self._render_function = code.eval()["render_function"]
@@ -283,7 +295,7 @@ class Template:
                     f"""to_str(eval({repr(expr_code)}, context))"""
                 )
             elif ntype == TokenType.PY_BLOCK:
-                self.flush_output()
+                self.__flush_output()
                 code_block = node[1][2:-2].strip()
                 self._code.add_line(
                     f"""exec({repr(code_block)}, context)"""
@@ -293,21 +305,36 @@ class Template:
                 # where HEADER: [<name>, <args>]
                 name = node[1][0]
                 args = node[1][1] if len(node[1]) == 2 else None
+                if args:
+                    # evaluating with macro-time context only.
+                    args, kwargs = _eval_args_str(args, self.__compile_time_context)
+                else:
+                    args = []
+                    kwargs = {}
                 body = node[3:-1]
 
                 # locate appropriate compiler and pass control to it
-                block_compiler = self.__block_compilers.get(name)
-                if not block_compiler:
+                macro = self.__macros.get(name)
+                if not macro:
                     raise ValueError(f"unknown block type {repr(name)}")
 
-                self.flush_output()
-                # insert placeholder which the block can use to generate its output
-                block_code_builder = self._code.add_section()
-                block_compiler(name, args, body, block_code_builder, self.__compile_body)
+                expanded_cst = macro(name, args, kwargs, body)
+                if expanded_cst:
+                    if not isinstance(expanded_cst[0], list):
+                        expanded_cst = [expanded_cst]
+                    self.__flush_output()  # TODO: do we even need this ?
+                    try:
+                        self.__compile_body(expanded_cst)
+                    except Exception as e:
+                        print("expanded cst")
+                        print(repr(expanded_cst))
+                        print("error")
+                        print(str(e))
+                        raise e
             else:
                 raise TemplateSyntaxError("unexpected element in state __compile_node", node)
 
-    def flush_output(self):
+    def __flush_output(self):
         """Force `buffered` to the code builder."""
         if len(self.__output_buffer) == 1:
             self._code.add_line(f"append_result({self.__output_buffer[0]})")
@@ -316,5 +343,5 @@ class Template:
         del self.__output_buffer[:]
 
     def render(self, context: Optional[Dict[str, Any]] = None):
-        render_context = {**self.context, **(context or {})}
+        render_context = {**self.__compile_time_context, **(context or {})}
         return self._render_function(render_context)

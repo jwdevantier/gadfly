@@ -1,11 +1,7 @@
-__pycache__
-*.pyc
-*.egg
-*.egg-info
-
-.mypy_cache
-*.so
-
+TODO
 .idea
 .vscode
 .venv
+venv
+*.egg-info
+__pycache__

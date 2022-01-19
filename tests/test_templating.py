@@ -162,7 +162,7 @@ def _dump_template_to_file(template: Template, fpath) -> None:
 ])
 def test_compiler_one_liners(src, ctx, out):
     cst = cst_build(Tokenizer.from_source(src))
-    template = Template(cst, compilers={})
+    template = Template(cst, macros={})
     # _dump_template_to_file(template, "/tmp/code.py")
     assert _eval_template(template, ctx) == out
 
@@ -178,5 +178,30 @@ def add(x, y):
     return x + y
 %% /py
 So, <%= a %>+<%= b %> -> <%= add(a, b) %>"""))
-    template = Template(cst, compilers={"py": block_compile_py})
+    template = Template(cst, macros={"py": block_compile_py})
     assert _eval_template(template, ctx) == out
+
+
+def test_args_eval():
+    src = """\
+%% something(x, y, "else", pi=3.1415)
+%% /something"""
+
+    block_evaluated = False
+
+    def block_compile_something(name, args, kwargs, cst):
+        nonlocal block_evaluated
+        block_evaluated = True
+        # test catches these checks
+        assert args == [1, 0, "else"]
+        assert kwargs == {"pi": 3.1415}
+        return cst
+
+    cst = cst_build(Tokenizer.from_source(src))
+
+    # creation triggers compilation and thus evaluation of the macro block
+    Template(cst,
+             {"x": 1, "y": 0},
+             macros={"something": block_compile_something})
+
+    assert block_evaluated, "block not called"
