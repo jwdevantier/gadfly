@@ -215,7 +215,7 @@ class TemplateSyntaxError(ValueError):
 
 
 CompileCSTFn = Callable[[list], None]
-BlockCompilerFn = Callable[[str, List[Any], Dict[str, Any], list], list]
+MacroFn = Callable[[str, List[Any], Dict[str, Any], list], list]
 
 
 def block_compile_py(name: str,
@@ -241,7 +241,7 @@ class Template:
     def __init__(self,
                  cst: list,
                  *contexts: Dict[str, Any],
-                 macros: Optional[Dict[str, BlockCompilerFn]] = None):
+                 macros: Optional[Dict[str, MacroFn]] = None):
         # construct context from successively merging each given context dict
         self.__compile_time_context = {}
         for context in contexts:
