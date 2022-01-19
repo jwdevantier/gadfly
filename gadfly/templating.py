@@ -1,10 +1,12 @@
 from enum import Enum
-from typing import List, Union, Dict, Any, Optional, Generator, Callable, Tuple
+from typing import List, Union, Dict, Any, Optional, Generator, Callable, Tuple, NewType
 from re import (
     compile as re_compile,
     match as re_match,
     split as re_split,
     MULTILINE as RE_MULTILINE)
+
+CST = NewType("CST", list)
 
 # <%= EXPR %>   --- supports multiline, not sure how useful that is.
 
@@ -92,7 +94,7 @@ class TokenType(Enum):
         return str(self.name)
 
 
-def cst_build(tokenizer: Tokenizer) -> list:
+def cst_build(tokenizer: Tokenizer) -> CST:
     ast_stack = []
     current = []
     while tokenizer.has_more():
@@ -127,10 +129,10 @@ def cst_build(tokenizer: Tokenizer) -> list:
     if ast_stack:
         raise ValueError(f"stack should be empty, is {repr(ast_stack)}")
 
-    return current
+    return CST(current)
 
 
-def cst_flatten(cst: list) -> Generator[str, None, None]:
+def cst_flatten(cst: CST) -> Generator[str, None, None]:
     if len(cst) == 0:
         return
 
@@ -215,24 +217,24 @@ class TemplateSyntaxError(ValueError):
 
 
 CompileCSTFn = Callable[[list], None]
-MacroFn = Callable[[str, List[Any], Dict[str, Any], list], list]
+MacroFn = Callable[[str, List[Any], Dict[str, Any], CST], CST]
 
 
 def block_compile_py(name: str,
                      args: List[Any],
                      kwargs: Dict[str, Any],
-                     body_cst: list) -> list:
+                     body_cst: CST) -> CST:
     assert len(body_cst) == 1, f"""malformed body input {repr(body_cst)}"""
     assert body_cst[0][0] == TokenType.TEXT, "expected text node"
     _, code = body_cst[0]
-    return [TokenType.PY_BLOCK,
-            f"<% {code} %>"]
+    return CST([TokenType.PY_BLOCK,
+                f"<% {code} %>"])
 
 
 def block_compile_doc(name: str,
                       args: List[Any],
                       kwargs: Dict[str, Any],
-                      body_cst: list) -> list:
+                      body_cst: CST) -> CST:
     # doc blocks are just for documenting the template, no processing needed
     pass
 
