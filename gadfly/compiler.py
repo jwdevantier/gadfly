@@ -5,7 +5,7 @@ from gadfly.config import Config
 from gadfly.cli import info, colors
 from gadfly.utils import output_path
 from gadfly.page_hooks_api import *
-from gadfly.template_runtime import Environment
+from gadfly.mako_templating import Environment
 from mako.runtime import UNDEFINED
 
 
