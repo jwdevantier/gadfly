@@ -7,6 +7,8 @@ from re import (
     MULTILINE as RE_MULTILINE)
 
 CST = NewType("CST", list)
+ExpandFn = Callable[[CST], Optional[CST]]
+MacroFn = Callable[[str, List[Any], Dict[str, Any], CST, ExpandFn], CST]
 
 # <%= EXPR %>   --- supports multiline, not sure how useful that is.
 
@@ -132,6 +134,54 @@ def cst_build(tokenizer: Tokenizer) -> CST:
     return CST(current)
 
 
+def cst_expand(cst: CST, *,
+               macros: Optional[Dict[str, MacroFn]] = None,
+               context: Optional[Dict[str, Any]] = None) -> CST:
+    macros = macros or {}
+    context = context or {}
+
+    def expand(cst: CST) -> Optional[CST]:
+        if not cst:
+            return
+        ntype = cst[0]
+        # e.g. [[TEXT "..."], [TEXT "..."], ...]
+        if isinstance(ntype, list):
+            res = CST([e for e in [expand(n) for n in cst] if e])
+            if not res:
+                return None
+            if len(res) == 1 and isinstance(res[0][0], list):
+                return res[0]
+            return res
+        elif ntype != TokenType.BLOCK:
+            return cst
+        else:
+            block = cst
+            name = block[1][0]
+            args = block[1][1] if len(block[1]) == 2 else None
+            if args:
+                args, kwargs = _eval_args_str(args, context)
+            else:
+                args = []
+                kwargs = {}
+
+            body = block[3:-1]
+
+            macro = macros.get(name)
+            if not macro:
+                # TODO raise relevant error with entire (sub)-CST
+                raise ValueError(f"unknown block type {repr(name)}")
+
+            expanded_cst = macro(name, args, kwargs, body, expand)
+            if not expanded_cst:
+                return
+
+            # macro may return CST referencing other macros, expand it fully
+            return expand(expanded_cst)
+
+    res = expand(cst) or CST([])
+    return res
+
+
 def cst_flatten(cst: CST) -> Generator[str, None, None]:
     if len(cst) == 0:
         return
@@ -216,17 +266,14 @@ class TemplateSyntaxError(ValueError):
         super().__init__(f"{msg}: {repr(thing)}")
 
 
-CompileCSTFn = Callable[[list], None]
-MacroFn = Callable[[str, List[Any], Dict[str, Any], CST], CST]
-
-
 def block_compile_py(name: str,
                      args: List[Any],
                      kwargs: Dict[str, Any],
-                     body_cst: CST) -> CST:
-    assert len(body_cst) == 1, f"""malformed body input {repr(body_cst)}"""
-    assert body_cst[0][0] == TokenType.TEXT, "expected text node"
-    _, code = body_cst[0]
+                     body: CST,
+                     expand: ExpandFn) -> CST:
+    assert len(body) == 1, f"""malformed body input {repr(body)}"""
+    assert body[0][0] == TokenType.TEXT, "expected text node"
+    _, code = body[0]
     return CST([TokenType.PY_BLOCK,
                 f"<% {code} %>"])
 
@@ -234,26 +281,19 @@ def block_compile_py(name: str,
 def block_compile_doc(name: str,
                       args: List[Any],
                       kwargs: Dict[str, Any],
-                      body_cst: CST) -> CST:
+                      body: CST,
+                      expand: ExpandFn) -> CST:
     # doc blocks are just for documenting the template, no processing needed
     pass
 
 
 class Template:
-    def __init__(self,
-                 cst: list,
-                 *contexts: Dict[str, Any],
-                 macros: Optional[Dict[str, MacroFn]] = None):
-        # construct context from successively merging each given context dict
-        self.__compile_time_context = {}
-        for context in contexts:
-            self.__compile_time_context.update(context)
+    def __init__(self, cst: CST):
 
         self._code = CodeBuilder()
         # use this to store/buffer output until required to flush it out (using `flush_output`)
         # this reduces the amount of code generated in the resulting render function
         self.__output_buffer = []
-        self.__macros = macros
 
         code = self._code
         code.add_line("def render_function(context):")
@@ -280,6 +320,8 @@ class Template:
         self._render_function = code.eval()["render_function"]
 
     def __compile_body(self, body: list):
+        # TODO: error - stack not used properly.
+        #       (never popped and you cannot resume from where you left off this way, it would loop infinitely)
         stack = []
         current = body
         for node in current:
@@ -302,37 +344,37 @@ class Template:
                 self._code.add_line(
                     f"""exec({repr(code_block)}, context)"""
                 )
-            elif ntype == TokenType.BLOCK:
-                # BLOCK: [<TYPE> <HEADER> <RAW HEADER> BODY... <RAW END>]
-                # where HEADER: [<name>, <args>]
-                name = node[1][0]
-                args = node[1][1] if len(node[1]) == 2 else None
-                if args:
-                    # evaluating with macro-time context only.
-                    args, kwargs = _eval_args_str(args, self.__compile_time_context)
-                else:
-                    args = []
-                    kwargs = {}
-                body = node[3:-1]
-
-                # locate appropriate compiler and pass control to it
-                macro = self.__macros.get(name)
-                if not macro:
-                    raise ValueError(f"unknown block type {repr(name)}")
-
-                expanded_cst = macro(name, args, kwargs, body)
-                if expanded_cst:
-                    if not isinstance(expanded_cst[0], list):
-                        expanded_cst = [expanded_cst]
-                    self.__flush_output()  # TODO: do we even need this ?
-                    try:
-                        self.__compile_body(expanded_cst)
-                    except Exception as e:
-                        print("expanded cst")
-                        print(repr(expanded_cst))
-                        print("error")
-                        print(str(e))
-                        raise e
+            # elif ntype == TokenType.BLOCK:
+            #     # BLOCK: [<TYPE> <HEADER> <RAW HEADER> BODY... <RAW END>]
+            #     # where HEADER: [<name>, <args>]
+            #     name = node[1][0]
+            #     args = node[1][1] if len(node[1]) == 2 else None
+            #     if args:
+            #         # evaluating with macro-time context only.
+            #         args, kwargs = _eval_args_str(args, self.__compile_time_context)
+            #     else:
+            #         args = []
+            #         kwargs = {}
+            #     body = node[3:-1]
+            #
+            #     # locate appropriate compiler and pass control to it
+            #     macro = self.__macros.get(name)
+            #     if not macro:
+            #         raise ValueError(f"unknown block type {repr(name)}")
+            #
+            #     expanded_cst = macro(name, args, kwargs, body)
+            #     if expanded_cst:
+            #         if not isinstance(expanded_cst[0], list):
+            #             expanded_cst = [expanded_cst]
+            #         self.__flush_output()  # TODO: do we even need this ?
+            #         try:
+            #             self.__compile_body(expanded_cst)
+            #         except Exception as e:
+            #             print("expanded cst")
+            #             print(repr(expanded_cst))
+            #             print("error")
+            #             print(str(e))
+            #             raise e
             else:
                 raise TemplateSyntaxError("unexpected element in state __compile_node", node)
 
@@ -345,5 +387,5 @@ class Template:
         del self.__output_buffer[:]
 
     def render(self, context: Optional[Dict[str, Any]] = None):
-        render_context = {**self.__compile_time_context, **(context or {})}
+        render_context = {**(context or {})}
         return self._render_function(render_context)

@@ -161,8 +161,8 @@ def _dump_template_to_file(template: Template, fpath) -> None:
     ("<% x = x + 2 %>number <%= x %>!", {"x": 2}, "number 4!"),
 ])
 def test_compiler_one_liners(src, ctx, out):
-    cst = cst_build(Tokenizer.from_source(src))
-    template = Template(cst, macros={})
+    cst = cst_expand(cst_build(Tokenizer.from_source(src)))
+    template = Template(cst)
     # _dump_template_to_file(template, "/tmp/code.py")
     assert _eval_template(template, ctx) == out
 
@@ -171,14 +171,17 @@ def test_compiler_one_liners(src, ctx, out):
     ({"a": 1, "b": 5}, "Hello, world!\nSo, 1+5 -> 6")
 ])
 def test_py_block_compiler(ctx, out):
-    cst = cst_build(Tokenizer.from_source("""\
+    cst_raw = cst_build(Tokenizer.from_source("""\
 Hello, world!
 %% py
 def add(x, y):
     return x + y
 %% /py
 So, <%= a %>+<%= b %> -> <%= add(a, b) %>"""))
-    template = Template(cst, macros={"py": block_compile_py})
+    cst = cst_expand(cst_raw,
+                     macros={"py": block_compile_py},
+                     context={})
+    template = Template(cst)
     assert _eval_template(template, ctx) == out
 
 
@@ -189,7 +192,7 @@ def test_args_eval():
 
     block_evaluated = False
 
-    def block_compile_something(name, args, kwargs, cst):
+    def block_compile_something(name, args, kwargs, cst, expand):
         nonlocal block_evaluated
         block_evaluated = True
         # test catches these checks
@@ -197,11 +200,69 @@ def test_args_eval():
         assert kwargs == {"pi": 3.1415}
         return cst
 
-    cst = cst_build(Tokenizer.from_source(src))
+    cst = cst_expand(cst_build(Tokenizer.from_source(src)),
+                     macros={"something": block_compile_something},
+                     context={"x": 1, "y": 0})
 
     # creation triggers compilation and thus evaluation of the macro block
-    Template(cst,
-             {"x": 1, "y": 0},
-             macros={"something": block_compile_something})
+    Template(cst)
 
     assert block_evaluated, "block not called"
+
+
+@pytest.mark.parametrize("cst", [
+    CST([TokenType.TEXT, "hello, world"]),
+    CST([TokenType.PY_BLOCK, "<%\nprint(3.14)\nprint(foo)\n%>"]),
+    CST([TokenType.PY_BLOCK, "<%= name %>"]),
+    CST([[TokenType.TEXT, "hello, "], [TokenType.PY_EXPR, "<%= name %>"]]),
+])
+def test_macro_cst_expand_identical(cst):
+    assert cst_expand(cst, macros={}, context={}) == cst
+
+
+@pytest.mark.parametrize("cst_in, cst_out", [
+   # TOP-level PY block
+   (CST([TokenType.BLOCK, ["py"], "%% py",
+         [TokenType.TEXT, "def add(x, y):\n    return x + y\n"],
+         "%% /py"]),
+    CST([TokenType.PY_BLOCK, "<% def add(x, y):\n    return x + y\n %>"])),
+
+   # Py Block in list of nodes
+   (CST([[TokenType.BLOCK, ["py"], "%% py",
+         [TokenType.TEXT, "def add(x, y):\n    return x + y\n"],
+         "%% /py"]]),
+    CST([[TokenType.PY_BLOCK, "<% def add(x, y):\n    return x + y\n %>"]])),
+
+    # Test ability to expand inner content of block
+    (CST([[TokenType.BLOCK, ["group"], "%%group",
+           [TokenType.BLOCK, ["py"], "%%py",
+            [TokenType.TEXT, "pi = 3.1415"],
+            "%%/py"],
+           "%% /group"]]),
+     CST([[TokenType.TEXT, "~~"],
+          [TokenType.PY_BLOCK, "<% pi = 3.1415 %>"],
+          [TokenType.TEXT, "~~"]]))
+])
+def test_cst_expand_blocks(cst_in, cst_out):
+    def block_compile_group(name: str,
+                            args: List[Any],
+                            kwargs: Dict[str, Any],
+                            body: CST,
+                            expand: ExpandFn) -> CST:
+        surround_t = [TokenType.TEXT, "~~"]
+        inner = expand(body)
+        if inner:
+            return CST([surround_t, *inner, surround_t])
+        else:
+            return CST([surround_t, surround_t])
+
+    assert cst_expand(cst_in,
+                      macros={"py": block_compile_py,
+                              "doc": block_compile_doc,
+                              "group": block_compile_group},
+                      context={}) == cst_out
+
+
+# TODO: args_eval test which showcases that ONLY compile-time macro args are available.
+
+# TODO: test custom macro expansion error
